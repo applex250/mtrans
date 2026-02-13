@@ -1,0 +1,176 @@
+import fs from 'fs';
+import path from 'path';
+
+export function parseMarkdown(filePath) {
+  const content = fs.readFileSync(filePath, 'utf-8');
+  const lines = content.split('\n');
+
+  const structure = {
+    abstract: '',
+    headings: [],
+    paragraphs: [],
+    referencesSection: {
+      startLine: 0,
+      endLine: 0,
+      content: '',
+      excluded: false
+    },
+    specialElements: {
+      tables: [],
+      codeBlocks: [],
+      mathBlocks: [],
+      images: []
+    }
+  };
+
+  let inAbstract = false;
+  let inReferences = false;
+  let currentParagraph = [];
+  let paraStartLine = 0;
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    const lineNum = i + 1;
+
+    const headingMatch = line.match(/^(#{1,6})\s+(.+)$/);
+    if (headingMatch) {
+      const level = headingMatch[1].length;
+      const text = headingMatch[2].trim();
+      structure.headings.push({ level, text, line: lineNum });
+
+      const lowerText = text.toLowerCase();
+      if (lowerText === 'abstract' || lowerText === '摘要') {
+        inAbstract = true;
+      } else if (inAbstract && level <= 2) {
+        inAbstract = false;
+      }
+
+      if (lowerText === 'references' || lowerText === 'bibliography' || lowerText === '参考文献') {
+        inReferences = true;
+        structure.referencesSection.startLine = lineNum;
+      }
+      continue;
+    }
+
+    if (inAbstract) {
+      structure.abstract += line + '\n';
+      continue;
+    }
+
+    const tableMatch = line.match(/^\|.*\|$/);
+    if (tableMatch) {
+      const tableEnd = findTableEnd(lines, i);
+      structure.specialElements.tables.push({
+        startLine: lineNum,
+        endLine: tableEnd
+      });
+      i = tableEnd - 1;
+      continue;
+    }
+
+    const codeBlockStart = line.match(/^```(\w*)$/);
+    if (codeBlockStart) {
+      const codeBlockEnd = findCodeBlockEnd(lines, i);
+      structure.specialElements.codeBlocks.push({
+        startLine: lineNum,
+        endLine: codeBlockEnd
+      });
+      i = codeBlockEnd - 1;
+      continue;
+    }
+
+    const mathBlockStart = line.match(/^\$\$/);
+    if (mathBlockStart) {
+      const mathBlockEnd = findMathBlockEnd(lines, i);
+      structure.specialElements.mathBlocks.push({
+        startLine: lineNum,
+        endLine: mathBlockEnd
+      });
+      i = mathBlockEnd - 1;
+      continue;
+    }
+
+    const imageMatch = line.match(/!\[.*?\]\(.*?\)/);
+    if (imageMatch) {
+      structure.specialElements.images.push({ line: lineNum });
+    }
+
+    if (line.trim()) {
+      if (currentParagraph.length === 0) {
+        paraStartLine = lineNum;
+      }
+      currentParagraph.push(line);
+    } else {
+      if (currentParagraph.length > 0 && !inReferences) {
+        const paraText = currentParagraph.join('\n');
+        structure.paragraphs.push({
+          startLine: paraStartLine,
+          endLine: lineNum - 1,
+          text: paraText,
+          wordCount: paraText.replace(/\s/g, '').length
+        });
+        currentParagraph = [];
+      }
+    }
+
+    if (inReferences) {
+      structure.referencesSection.content += line + '\n';
+    }
+  }
+
+  if (currentParagraph.length > 0 && !inReferences) {
+    const paraText = currentParagraph.join('\n');
+    structure.paragraphs.push({
+      startLine: paraStartLine,
+      endLine: lines.length,
+      text: paraText,
+      wordCount: paraText.replace(/\s/g, '').length
+    });
+  }
+
+  if (structure.referencesSection.startLine > 0) {
+    structure.referencesSection.endLine = lines.length;
+    structure.referencesSection.excluded = true;
+    structure.totalLines = structure.referencesSection.startLine - 1;
+  } else {
+    structure.totalLines = lines.length;
+  }
+
+  return structure;
+}
+
+function findTableEnd(lines, startLine) {
+  for (let i = startLine + 1; i < lines.length; i++) {
+    if (!lines[i].match(/^\|.*\|$/)) {
+      return i + 1;
+    }
+  }
+  return lines.length;
+}
+
+function findCodeBlockEnd(lines, startLine) {
+  for (let i = startLine + 1; i < lines.length; i++) {
+    if (lines[i].match(/^```$/)) {
+      return i + 1;
+    }
+  }
+  return lines.length;
+}
+
+function findMathBlockEnd(lines, startLine) {
+  for (let i = startLine + 1; i < lines.length; i++) {
+    if (lines[i].match(/^\$\$$/)) {
+      return i + 1;
+    }
+  }
+  return lines.length;
+}
+
+export function extractSegment(lines, segments) {
+  const segmentTexts = segments.map(seg => {
+    const startIdx = seg[0] - 1;
+    const endIdx = seg[1] - 1;
+    return lines.slice(startIdx, endIdx).join('\n');
+  });
+  return segmentTexts;
+}

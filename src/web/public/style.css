@@ -1,0 +1,362 @@
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    font-family: Consolas, Monaco, 'Courier New', monospace;
+    background: #000;
+    color: #fff;
+    font-size: 14px;
+    line-height: 1.6;
+    height: 100vh;
+    overflow: hidden;
+}
+
+.container {
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+}
+
+header {
+    background: #111;
+    border-bottom: 1px solid #333;
+    padding: 15px 20px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+header h1 {
+    font-size: 18px;
+    font-weight: normal;
+    letter-spacing: 1px;
+}
+
+.header-controls {
+    display: flex;
+    gap: 20px;
+    align-items: center;
+}
+
+.path-selector {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+}
+
+.path-selector input[type="text"] {
+    background: #000;
+    border: 1px solid #333;
+    color: #0f0;
+    padding: 5px 10px;
+    font-family: inherit;
+    font-size: 13px;
+    width: 300px;
+}
+
+.path-selector input[type="text"]:focus {
+    outline: none;
+    border-color: #0f0;
+}
+
+.path-selector button,
+.task-actions button,
+.console-controls button {
+    background: #000;
+    border: 1px solid #333;
+    color: #fff;
+    padding: 5px 15px;
+    font-family: inherit;
+    font-size: 13px;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.path-selector button:hover,
+.task-actions button:hover,
+.console-controls button:hover {
+    border-color: #0f0;
+    color: #0f0;
+}
+
+.main-content {
+    display: flex;
+    flex: 1;
+    overflow: hidden;
+}
+
+.task-panel {
+    width: 350px;
+    background: #0a0a0a;
+    border-right: 1px solid #333;
+    display: flex;
+    flex-direction: column;
+}
+
+.task-panel h2,
+.console-panel h2 {
+    padding: 10px 15px;
+    font-size: 14px;
+    font-weight: normal;
+    border-bottom: 1px solid #333;
+    background: #111;
+}
+
+.task-list {
+    flex: 1;
+    overflow-y: auto;
+    padding: 10px;
+}
+
+.empty-state {
+    text-align: center;
+    color: #666;
+    padding: 40px 20px;
+    font-size: 12px;
+}
+
+.task-item {
+    background: #111;
+    border: 1px solid #333;
+    margin-bottom: 10px;
+    padding: 10px;
+    transition: border-color 0.2s;
+    display: flex;
+    flex-direction: column;
+    min-height: 100px;
+}
+
+.task-item:hover {
+    border-color: #666;
+}
+
+.task-item.completed {
+    border-color: #0f0;
+}
+
+.task-item.error {
+    border-color: #f00;
+}
+
+.task-item.paused {
+    border-color: #ff0;
+}
+
+.task-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 8px;
+}
+
+.task-name {
+    font-size: 13px;
+    font-weight: bold;
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.task-status {
+    font-size: 11px;
+    padding: 2px 6px;
+    border: 1px solid #333;
+}
+
+.task-status.pending {
+    color: #666;
+}
+
+.task-status.processing {
+    color: #ff0;
+    border-color: #ff0;
+}
+
+.task-status.completed {
+    color: #0f0;
+    border-color: #0f0;
+}
+
+.task-status.error {
+    color: #f00;
+    border-color: #f00;
+}
+
+.task-status.paused {
+    color: #ff0;
+    border-color: #ff0;
+}
+
+.task-progress {
+    margin-top: 8px;
+}
+
+.progress-bar {
+    height: 20px;
+    background: #000;
+    border: 1px solid #333;
+    display: flex;
+    align-items: center;
+    padding: 0 5px;
+    font-size: 11px;
+}
+
+.progress-fill {
+    height: 100%;
+    background: #0f0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #000;
+    font-weight: bold;
+    min-width: 30px;
+}
+
+.task-speed {
+    font-size: 11px;
+    color: #666;
+    margin-top: 5px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.task-speed span {
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    margin-right: 10px;
+}
+
+.task-speed button {
+    flex-shrink: 0;
+}
+
+.task-actions {
+    padding: 10px;
+    border-top: 1px solid #333;
+}
+
+.task-actions button {
+    width: 100%;
+}
+
+.upload-zone {
+    padding: 20px;
+    border-top: 1px solid #333;
+}
+
+.upload-zone.dragover {
+    background: #1a1a1a;
+    border-color: #0f0;
+}
+
+.upload-content {
+    text-align: center;
+    padding: 30px 20px;
+    border: 1px dashed #333;
+    transition: all 0.3s;
+    cursor: pointer;
+}
+
+.upload-content:hover,
+.upload-zone.dragover .upload-content {
+    border-color: #0f0;
+    background: #0a0a0a;
+}
+
+.upload-icon {
+    font-size: 32px;
+    margin-bottom: 10px;
+}
+
+.upload-content p {
+    color: #666;
+    font-size: 12px;
+}
+
+.console-panel {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    background: #000;
+}
+
+.console-output {
+    flex: 1;
+    overflow-y: auto;
+    padding: 15px;
+    font-size: 12px;
+}
+
+.log-entry {
+    margin-bottom: 3px;
+    line-height: 1.5;
+}
+
+.log-entry .timestamp {
+    color: #666;
+    margin-right: 10px;
+}
+
+.log-entry.info {
+    color: #ccc;
+}
+
+.log-entry.error {
+    color: #f00;
+}
+
+.log-entry.warning {
+    color: #ff0;
+}
+
+.log-entry.success {
+    color: #0f0;
+}
+
+.console-controls {
+    padding: 10px 15px;
+    border-top: 1px solid #333;
+    background: #111;
+    display: flex;
+    gap: 10px;
+}
+
+::-webkit-scrollbar {
+    width: 8px;
+}
+
+::-webkit-scrollbar-track {
+    background: #000;
+}
+
+::-webkit-scrollbar-thumb {
+    background: #333;
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background: #666;
+}
+
+@media (max-width: 900px) {
+    .main-content {
+        flex-direction: column;
+    }
+    
+    .task-panel {
+        width: 100%;
+        height: 50%;
+        border-right: none;
+        border-bottom: 1px solid #333;
+    }
+    
+    .console-panel {
+        height: 50%;
+    }
+}

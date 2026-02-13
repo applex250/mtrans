@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>mtrans - Markdown 学术文献翻译工具</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>mtrans - Markdown 学术文献翻译工具</h1>
+            <div class="header-controls">
+                <label class="path-selector">
+                    <span>输出路径:</span>
+                    <input type="text" id="outputPath" value="output" placeholder="选择输出目录">
+                    <button id="selectOutputPath">选择</button>
+                </label>
+            </div>
+        </header>
+
+        <div class="main-content">
+            <aside class="task-panel">
+                <h2>任务队列</h2>
+                <div class="task-list" id="taskList">
+                    <div class="empty-state">暂无任务</div>
+                </div>
+                <div class="upload-zone" id="uploadZone">
+                    <div class="upload-content">
+                        <span class="upload-icon">📄</span>
+                        <p>拖拽文档到此处<br>或点击上传</p>
+                        <input type="file" id="fileInput" accept=".md,.markdown" multiple hidden>
+                    </div>
+                </div>
+                <div class="task-actions">
+                    <button id="clearCompleted">清除已完成</button>
+                </div>
+            </aside>
+
+            <main class="console-panel">
+                <h2>控制台输出</h2>
+                <div class="console-output" id="consoleOutput"></div>
+                <div class="console-controls">
+                    <button id="clearConsole">清空</button>
+                </div>
+            </main>
+        </div>
+    </div>
+
+    <script src="/socket.io/socket.io.js"></script>
+    <script src="app.js"></script>
+</body>
+</html>
