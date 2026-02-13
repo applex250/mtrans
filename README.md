@@ -126,7 +126,7 @@ mtrans/
 ├── output/                      # 翻译结果输出目录
 ├── debug/                       # 调试文件目录
 ├── .env.example                 # 环境变量模板
-├── settings.json                # 用户配置文件（自动生成）
+├── settings.json                # 用户配置文件（该文件会在用户修改设置时自动生成）
 └── package.json
 ```
 
@@ -143,7 +143,7 @@ mtrans/
 
 ### 配置文件
 
-`settings.json` 文件会在首次运行 Web 服务器时自动生成，包含以下配置：
+`settings.json` 该文件会在用户修改设置时,自动生成，包含以下配置：
 
 ```json
 {
