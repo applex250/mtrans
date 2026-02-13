@@ -4,5 +4,6 @@ settings.json
 output/
 debug/
 input/
+cn/
 *.log
 .DS_Store
