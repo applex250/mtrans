@@ -1,0 +1,88 @@
+专业方向：大语言模型评估基准的系统性综述。
+
+文档结构：
+# A Survey on Large Language Model Benchmarks (行1, 960字)
+# Contents (行24, 0字)
+# 1 Introduction 4 (行26, 0字)
+# 2 Background 5 (行28, 41字)
+# 3 General Capabilities Benchmarks 6 (行34, 441字)
+# 4 Domain-Specific Benchmarks 14 (行62, 486字)
+# 5 Target-specific benchmarks 25 (行100, 322字)
+# 6 Conclusion 34 (行128, 0字)
+# Abstract (行130, 0字)
+# 1 Introduction (行134, 3586字)
+# 2 Background (行150, 0字)
+# 2.1 Large Language Models (行152, 1416字)
+# 2.2 LLM Benchmarks (行160, 2090字)
+# 3 General Capabilities Benchmarks (行175, 0字)
+# 3.1 Linguistic Core (行177, 526字)
+# 3.1.1 The Evolution of Linguistic Benchmarks (行181, 3820字)
+# Phase 2: The Adversarial Turn and Deeper Linguistic Probes (2019) (行193, 899字)
+# Phase 3: Beyond Linguistic Hegemony (2020) (行199, 1582字)
+# Phase 5: The Holistic Era and Fine-Grained Assessment (2022–Present) (行207, 1115字)
+# 3.1.2 Cross-Cutting Design Innovations (行215, 1037字)
+# 3.1.3 Summary and Future Directions (行225, 1557字)
+# 3.2 Knowledge (行233, 3371字)
+# 3.2.1 Evolution of Knowledge Evaluation Paradigms (行243, 1378字)
+# 3.2.2 Methodological Landscape and Divergent Philosophies (行251, 1683字)
+# 3.2.3 Summary and Future Directions (行257, 1596字)
+# 3.3 Reasoning (行265, 460字)
+# 3.3.1 Logical Reasoning (行269, 2056字)
+# 3.3.2 Specialized and Commonsense Reasoning (行277, 1317字)
+# 3.3.3 Applied and Contextual Reasoning (行283, 1849字)
+# 3.3.4 Summary and Future Directions (行291, 12347字)
+# 4 Domain-Specific Benchmarks (行315, 0字)
+# 4.1 Natural Sciences (行317, 1137字)
+# 4.1.1 Mathematics (行323, 1767字)
+# 4.1.2 Physics (行331, 22189字)
+# 4.1.3 Chemistry (行351, 1821字)
+# 4.1.4 Biology (行357, 1463字)
+# 4.1.5 Cross-Disciplinary and General Scientific Abilities (行363, 1996字)
+# 4.1.6 Summary and Future Directions (行371, 1839字)
+# 4.2 Humanities & Social Sciences (行383, 7304字)
+# 4.2.1 Law (行397, 6057字)
+# 4.2.2 Intellectual Property (行415, 4147字)
+# 4.2.3 Education (行429, 2430字)
+# 4.2.4 Psychology (行437, 2557字)
+# 4.2.5 Finance (行445, 1188字)
+# 4.2.6 Summary and Future Directions (行449, 800字)
+# 4.3 Engineering & Technology (行455, 5553字)
+# 4.3.1 Software Engineering and Information Technology (行465, 3546字)
+# 4.3.2 Specialized Engineering Disciplines (行481, 1692字)
+# 4.3.3 Summary and Future Directions (行491, 1374字)
+# 5 Target-specific benchmarks (行499, 0字)
+# 5.1 Risk & Reliability (行501, 9726字)
+# 5.1.1 Safety (行523, 4725字)
+# 5.1.2 Hallucination (行535, 3265字)
+# 5.1.3 Robustness (行557, 2699字)
+# 5.1.4 Data Leak (行565, 2047字)
+# 5.1.5 Summary and Future Directions (行577, 1641字)
+# 5.2 Agent (行583, 8645字)
+# 5.2.1 Specific Capability Assessment (行593, 2157字)
+# 5.2.2 Integrated Capability Assessment (行607, 2756字)
+# 5.2.3 Domain Proficiency Evaluation (行619, 2165字)
+# 5.2.4 Safety & Risk Evaluation (行629, 1874字)
+# 5.2.5 Summary and Future Directions (行639, 1624字)
+# 5.3 Others (行645, 7437字)
+# 6 Conclusion (行667, 1210字)
+注意：参考文献部分（行671-2597）已排除，不参与分段。
+
+总行数：670
+
+请按照二级标题进行分段（速度优先）：
+- 每个二级标题（##）作为一段的开始
+- 一段的结束是下一个二级标题之前的一行
+- Abstract单独作为一段
+- 分段范围不超过总行数（670）
+
+请返回JSON格式的分段结果，格式为：
+{
+  "segments": [[startLine, endLine], ...],
+  "reason": "分段理由"
+}
+
+示例：
+{
+  "segments": [[1, 28], [29, 64], [65, 100]],
+  "reason": "按照二级标题分段：Abstract、1. Introduction、2. Related Work等"
+}

@@ -1,10 +1,12 @@
 # mtrans - Markdown 学术文献翻译工具
 
 基于智谱 GLM-4.7 的英文学术文献 Markdown 翻译工具，支持智能分段、并发翻译和实时进度显示。
+![alt text](image.png)
 # 推荐使用方法
 https://mineru.net/client 进行pdf转markdown，
 
 然后用该项目进行翻译。
+
 ## 特性
 
 - ✅ 智能分段：LLM 自动分析文档结构，设计最优分段方案
