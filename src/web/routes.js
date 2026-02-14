@@ -95,35 +95,41 @@ router.post('/task', async (req, res) => {
         logger(`  - 标题数: ${structure.headings.length}`);
         logger(`  - 段落数: ${structure.paragraphs.length}`);
         logger(`  - Abstract长度: ${structure.abstract.length} 字符`);
-        
+
         logger('步骤 2/5: 提取专业方向...');
         const direction = await extractDirection(structure);
         logger(`  专业方向: ${direction}`);
-        
+
         logger('步骤 3/5: 设计分段方案...');
         const { segments, reason } = await designSegments(structure, direction);
         logger(`  分段数: ${segments.length}`);
         logger(`  分段理由: ${reason}`);
-        
+        logger('  分段详情:');
+        segments.forEach((seg, index) => {
+          const [start, end] = seg;
+          const segmentLines = end - start + 1;
+          logger(`    分段 ${index + 1}: 行 ${start} - ${end} (共 ${segmentLines} 行)`);
+        });
+
         logger('步骤 4/5: 开始翻译...');
         const content = fs.readFileSync(task.inputPath, 'utf-8');
         const lines = content.split('\n');
-        
+
         const MAX_CONCURRENCY = parseInt(process.env.MAX_CONCURRENCY || '2', 10);
         const translator = new Translator(MAX_CONCURRENCY, task.outputPath);
-        
+
         translator.onProgress = (current, total, speed) => {
           const progress = (current / total) * 100;
           taskQueue.updateTaskProgress(task.id, progress, speed);
           logger(`翻译进度 |${'█'.repeat(Math.floor(progress / 10))}${'░'.repeat(10 - Math.floor(progress / 10))}| ${Math.floor(progress)}% | ${current}/${total} 段 | 速度: ${speed} 段/秒`);
         };
-        
+
         translator.onLog = (message) => {
           logger(message);
         };
-        
+
         await translator.translateAll(segments, lines, direction);
-        
+
         logger('步骤 5/5: 处理参考文献...');
         if (structure.referencesSection.excluded && structure.referencesSection.content) {
           logger(`  参考文献位置: 行${structure.referencesSection.startLine}-${structure.referencesSection.endLine}`);
@@ -132,7 +138,7 @@ router.post('/task', async (req, res) => {
         } else {
           logger('  未检测到参考文献章节');
         }
-        
+
         logger(`翻译完成，已保存到: ${task.outputPath}`);
         
       } catch (error) {

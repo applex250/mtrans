@@ -6,7 +6,7 @@ import path from 'path';
 dotenv.config();
 
 const apiKey = process.env.ZHIPU_API_KEY;
-const model = process.env.ZHIPU_MODEL || 'glm-4.7';
+const model = process.env.ZHIPU_MODEL || 'GLM-4.7-FlashX';
 const API_URL = 'https://open.bigmodel.cn/api/coding/paas/v4/chat/completions';
 
 if (!apiKey) {

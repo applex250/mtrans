@@ -38,12 +38,18 @@ async function translatePaper(inputFile, outputFile) {
     const { segments, reason } = await designSegments(structure, direction);
     console.log(`  分段数: ${segments.length}`);
     console.log(`  分段理由: ${reason}`);
+    console.log('  分段详情:');
+    segments.forEach((seg, index) => {
+      const [start, end] = seg;
+      const lines = end - start + 1;
+      console.log(`    分段 ${index + 1}: 行 ${start} - ${end} (共 ${lines} 行)`);
+    });
     console.log();
 
     console.log('步骤 4/5: 开始翻译...');
     const content = fs.readFileSync(inputFile, 'utf-8');
     const lines = content.split('\n');
-    
+
     const translator = new Translator(MAX_CONCURRENCY, outputFile);
     await translator.translateAll(segments, lines, direction);
     console.log();

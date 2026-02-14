@@ -8,6 +8,7 @@ const TRANSLATE_PROMPT = (direction, content, startLine, endLine) => {
   return `专业方向：${direction}
 
 翻译规则：
+0. 翻译为简体中文
 1. 保持学术风格，缩写/术语不翻译
 2. 表格/图片/公式/代码块保持原样
 3. 保持markdown结构
@@ -129,29 +130,29 @@ export class Translator {
     const tempContent = fs.readFileSync(this.tempFile, 'utf-8');
     const segmentRegex = /<!-- SEGMENT:(\d+) -->\n([\s\S]*?)(?=\n<!-- SEGMENT:|$)/g;
     const segmentMap = new Map();
-    
+
     let match;
     while ((match = segmentRegex.exec(tempContent)) !== null) {
       const index = parseInt(match[1]);
       const content = match[2].trim();
       segmentMap.set(index, content);
     }
-    
+
     let finalContent = '';
     for (let i = 0; i < segments.length; i++) {
       if (segmentMap.has(i)) {
         finalContent += segmentMap.get(i) + '\n\n';
       }
     }
-    
+
     fs.writeFileSync(this.outputFile, finalContent.trim(), 'utf-8');
-    
+
     try {
       fs.unlinkSync(this.tempFile);
     } catch (err) {
       console.warn('警告: 无法删除临时文件', this.tempFile);
     }
-    
+
     return finalContent;
   }
 
