@@ -4,9 +4,10 @@ import path from 'path';
 import fs from 'fs';
 import { taskQueue } from './queue.js';
 import { loadSettings, saveSettings, updateSetting } from './settings.js';
-import { parseMarkdown } from '../parsers/markdownParser.js';
+import { parseMarkdown, parseFilteredMarkdown } from '../parsers/markdownParser.js';
 import { extractDirection, designSegments } from '../translator/segmentDesigner.js';
 import { Translator } from '../translator/translator.js';
+import { filterSpecialElements, saveFilteredContent } from '../filters/elementFilter.js';
 
 const router = express.Router();
 
@@ -89,19 +90,44 @@ router.post('/task', async (req, res) => {
       logger(`输出文件: ${task.outputPath}`);
       
       try {
-        logger('步骤 1/5: 解析 Markdown...');
-        const structure = parseMarkdown(task.inputPath);
-        logger(`  - 总行数: ${structure.totalLines}`);
-        logger(`  - 标题数: ${structure.headings.length}`);
-        logger(`  - 段落数: ${structure.paragraphs.length}`);
-        logger(`  - Abstract长度: ${structure.abstract.length} 字符`);
+        logger('步骤 1/6: 解析原始 Markdown...');
+        const originalStructure = parseMarkdown(task.inputPath);
+        logger(`  - 原始总行数: ${originalStructure.totalLines}`);
+        logger(`  - 标题数: ${originalStructure.headings.length}`);
 
-        logger('步骤 2/5: 提取专业方向...');
-        const direction = await extractDirection(structure);
+        logger('步骤 2/6: 过滤特殊元素并保存中间文件...');
+        const content = fs.readFileSync(task.inputPath, 'utf-8');
+        const lines = content.split('\n');
+        const { filteredLines, elementMap, lineMapping, stats } = filterSpecialElements(lines, originalStructure);
+        logger(`  - 过滤前: ${lines.length} 行`);
+        logger(`  - 过滤后: ${filteredLines.length} 行`);
+        logger(`  - 表格: ${stats.tablesFiltered} 个`);
+        logger(`  - 图片: ${stats.imagesFiltered} 个`);
+        logger(`  - 代码块: ${stats.codeBlocksFiltered} 个`);
+        
+        const { filteredFile, elementMapFile, lineMappingFile, statsFile } = saveFilteredContent(
+          filteredLines, 
+          elementMap, 
+          lineMapping, 
+          stats, 
+          task.inputPath
+        );
+        logger(`  - 过滤文件: ${filteredFile}`);
+        logger(`  - 元素映射: ${elementMapFile}`);
+
+        logger('步骤 3/6: 解析过滤后的 Markdown...');
+        const filteredStructure = parseFilteredMarkdown(filteredLines);
+        logger(`  - 过滤后总行数: ${filteredStructure.totalLines}`);
+        logger(`  - 标题数: ${filteredStructure.headings.length}`);
+        logger(`  - 段落数: ${filteredStructure.paragraphs.length}`);
+        logger(`  - Abstract长度: ${filteredStructure.abstract.length} 字符`);
+
+        logger('步骤 4/6: 提取专业方向...');
+        const direction = await extractDirection(filteredStructure);
         logger(`  专业方向: ${direction}`);
 
-        logger('步骤 3/5: 设计分段方案...');
-        const { segments, reason } = await designSegments(structure, direction);
+        logger('步骤 5/6: 设计分段方案...');
+        const { segments, reason } = await designSegments(filteredStructure, direction);
         logger(`  分段数: ${segments.length}`);
         logger(`  分段理由: ${reason}`);
         logger('  分段详情:');
@@ -111,10 +137,7 @@ router.post('/task', async (req, res) => {
           logger(`    分段 ${index + 1}: 行 ${start} - ${end} (共 ${segmentLines} 行)`);
         });
 
-        logger('步骤 4/5: 开始翻译...');
-        const content = fs.readFileSync(task.inputPath, 'utf-8');
-        const lines = content.split('\n');
-
+        logger('步骤 6/6: 翻译并还原...');
         const MAX_CONCURRENCY = parseInt(process.env.MAX_CONCURRENCY || '2', 10);
         const translator = new Translator(MAX_CONCURRENCY, task.outputPath);
 
@@ -128,18 +151,29 @@ router.post('/task', async (req, res) => {
           logger(message);
         };
 
-        await translator.translateAll(segments, lines, direction);
+        await translator.translateAll(segments, filteredLines, direction, elementMap);
 
-        logger('步骤 5/5: 处理参考文献...');
-        if (structure.referencesSection.excluded && structure.referencesSection.content) {
-          logger(`  参考文献位置: 行${structure.referencesSection.startLine}-${structure.referencesSection.endLine}`);
-          translator.appendReferences(structure.referencesSection.content);
-          logger('  参考文献已追加到文件末尾');
-        } else {
-          logger('  未检测到参考文献章节');
+        if (originalStructure.referencesSection.excluded && originalStructure.referencesSection.content) {
+          logger(`  - 追加参考文献...`);
+          translator.appendReferences(originalStructure.referencesSection.content);
         }
 
         logger(`翻译完成，已保存到: ${task.outputPath}`);
+
+        logger('清理中间文件...');
+        const tempFiles = [filteredFile, elementMapFile, lineMappingFile, statsFile];
+        let deletedCount = 0;
+        for (const tempFile of tempFiles) {
+          try {
+            if (fs.existsSync(tempFile)) {
+              fs.unlinkSync(tempFile);
+              deletedCount++;
+            }
+          } catch (err) {
+            logger(`  警告: 无法删除文件 ${tempFile}`, 'warn');
+          }
+        }
+        logger(`  已删除 ${deletedCount} 个中间文件`);
         
       } catch (error) {
         logger(`错误: ${error.message}`, 'error');

@@ -57,6 +57,17 @@ export function parseMarkdown(filePath) {
       continue;
     }
 
+    const htmlTableMatch = line.match(/<table\b/i);
+    if (htmlTableMatch) {
+      const tableEnd = findHtmlTableEnd(lines, i);
+      structure.specialElements.tables.push({
+        startLine: lineNum,
+        endLine: tableEnd
+      });
+      i = tableEnd - 1;
+      continue;
+    }
+
     const tableMatch = line.match(/^\|.*\|$/);
     if (tableMatch) {
       const tableEnd = findTableEnd(lines, i);
@@ -148,6 +159,15 @@ function findTableEnd(lines, startLine) {
   return lines.length;
 }
 
+function findHtmlTableEnd(lines, startLine) {
+  for (let i = startLine; i < lines.length; i++) {
+    if (lines[i].match(/<\/table>/i)) {
+      return i + 1;
+    }
+  }
+  return lines.length;
+}
+
 function findCodeBlockEnd(lines, startLine) {
   for (let i = startLine + 1; i < lines.length; i++) {
     if (lines[i].match(/^```$/)) {
@@ -164,6 +184,92 @@ function findMathBlockEnd(lines, startLine) {
     }
   }
   return lines.length;
+}
+
+export function parseFilteredMarkdown(filteredLines) {
+  const structure = {
+    abstract: '',
+    headings: [],
+    paragraphs: [],
+    totalLines: filteredLines.length,
+    referencesSection: {
+      startLine: filteredLines.length + 1,
+      endLine: filteredLines.length,
+      content: '',
+      excluded: false
+    }
+  };
+
+  let inAbstract = false;
+  let inReferences = false;
+  let currentParagraph = [];
+  let paraStartLine = 0;
+
+  for (let i = 0; i < filteredLines.length; i++) {
+    const line = filteredLines[i];
+    const lineNum = i + 1;
+
+    const headingMatch = line.match(/^(#{1,6})\s+(.+)$/);
+    if (headingMatch) {
+      const level = headingMatch[1].length;
+      const text = headingMatch[2].trim();
+      structure.headings.push({ level, text, line: lineNum });
+
+      const lowerText = text.toLowerCase();
+      if (lowerText === 'abstract' || lowerText === '摘要') {
+        inAbstract = true;
+      } else if (inAbstract && level <= 2) {
+        inAbstract = false;
+      }
+
+      if (lowerText === 'references' || lowerText === 'bibliography' || lowerText === '参考文献') {
+        inReferences = true;
+        structure.referencesSection.startLine = lineNum;
+      }
+      continue;
+    }
+
+    if (inAbstract) {
+      structure.abstract += line + '\n';
+      continue;
+    }
+
+    if (line.trim()) {
+      if (currentParagraph.length === 0) {
+        paraStartLine = lineNum;
+      }
+      currentParagraph.push(line);
+    } else {
+      if (currentParagraph.length > 0 && !inReferences) {
+        const paraText = currentParagraph.join('\n');
+        structure.paragraphs.push({
+          startLine: paraStartLine,
+          endLine: lineNum - 1,
+          text: paraText,
+          wordCount: paraText.replace(/\s/g, '').length
+        });
+        currentParagraph = [];
+      }
+    }
+  }
+
+  if (currentParagraph.length > 0 && !inReferences) {
+    const paraText = currentParagraph.join('\n');
+    structure.paragraphs.push({
+      startLine: paraStartLine,
+      endLine: filteredLines.length,
+      text: paraText,
+      wordCount: paraText.replace(/\s/g, '').length
+    });
+  }
+
+  if (structure.referencesSection.startLine <= filteredLines.length) {
+    structure.referencesSection.endLine = filteredLines.length;
+    structure.referencesSection.excluded = true;
+    structure.totalLines = structure.referencesSection.startLine - 1;
+  }
+
+  return structure;
 }
 
 export function extractSegment(lines, segments) {

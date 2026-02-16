@@ -1,3 +1,6 @@
+import fs from 'fs';
+import path from 'path';
+
 export function filterSpecialElements(lines, structure) {
   const elementMap = new Map();
   const filteredLines = [];
@@ -12,6 +15,20 @@ export function filterSpecialElements(lines, structure) {
   while (i < lines.length) {
     const line = lines[i];
     const originalLineNum = i + 1;
+    
+    const htmlTableMatch = line.match(/<table\b/i);
+    if (htmlTableMatch) {
+      const tableEnd = findHtmlTableEnd(lines, i);
+      const tableContent = lines.slice(i, tableEnd + 1).join('\n');
+      const placeholder = `<!-- TABLE:${++tableCounter} -->`;
+ 
+      elementMap.set(placeholder, tableContent);
+      filteredLines.push(placeholder);
+      lineMapping.set(++filteredLineCount, originalLineNum);
+ 
+      i = tableEnd + 1;
+      continue;
+    }
     
     const tableMatch = line.match(/^\|.*\|$/);
     if (tableMatch) {
@@ -100,6 +117,15 @@ function findTableEnd(lines, startLine) {
   return lines.length - 1;
 }
 
+function findHtmlTableEnd(lines, startLine) {
+  for (let i = startLine; i < lines.length; i++) {
+    if (lines[i].match(/<\/table>/i)) {
+      return i;
+    }
+  }
+  return lines.length - 1;
+}
+
 function findCodeBlockEnd(lines, startLine) {
   for (let i = startLine + 1; i < lines.length; i++) {
     if (lines[i].match(/^```$/)) {
@@ -107,4 +133,41 @@ function findCodeBlockEnd(lines, startLine) {
     }
   }
   return lines.length - 1;
+}
+
+export function saveFilteredContent(filteredLines, elementMap, lineMapping, stats, inputFile) {
+  const basename = path.basename(inputFile, path.extname(inputFile));
+  const tempDir = path.join(process.cwd(), 'temp');
+  
+  if (!fs.existsSync(tempDir)) {
+    fs.mkdirSync(tempDir, { recursive: true });
+  }
+  
+  const filteredFile = path.join(tempDir, `${basename}_filtered.md`);
+  const elementMapFile = path.join(tempDir, `${basename}_element_map.json`);
+  const lineMappingFile = path.join(tempDir, `${basename}_line_mapping.json`);
+  const statsFile = path.join(tempDir, `${basename}_filter_stats.json`);
+  
+  fs.writeFileSync(filteredFile, filteredLines.join('\n'), 'utf-8');
+  
+  const elementMapObj = {};
+  elementMap.forEach((value, key) => {
+    elementMapObj[key] = value;
+  });
+  fs.writeFileSync(elementMapFile, JSON.stringify(elementMapObj, null, 2), 'utf-8');
+  
+  const lineMappingObj = {};
+  lineMapping.forEach((value, key) => {
+    lineMappingObj[key] = value;
+  });
+  fs.writeFileSync(lineMappingFile, JSON.stringify(lineMappingObj, null, 2), 'utf-8');
+  
+  fs.writeFileSync(statsFile, JSON.stringify(stats, null, 2), 'utf-8');
+  
+  return {
+    filteredFile,
+    elementMapFile,
+    lineMappingFile,
+    statsFile
+  };
 }

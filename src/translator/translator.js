@@ -3,6 +3,7 @@ import cliProgress from 'cli-progress';
 import fs from 'fs';
 import path from 'path';
 import { chatWithRetry } from '../llm/zhipuClient.js';
+import { restoreSpecialElements } from '../filters/elementFilter.js';
 
 const TRANSLATE_PROMPT = (direction, content, startLine, endLine) => {
   return `专业方向：${direction}
@@ -103,7 +104,7 @@ export class Translator {
     }
   }
 
-  async translateAll(segments, lines, direction) {
+  async translateAll(segments, lines, direction, elementMap = null) {
     if (segments.length === 0) {
       console.log('  无需要翻译的内容');
       return '';
@@ -123,7 +124,14 @@ export class Translator {
     await Promise.all(tasks);
     this.stopProgressBar();
     
-    return this.assembleAndWriteFinal(segments);
+    let finalContent = this.assembleAndWriteFinal(segments);
+    
+    if (elementMap && elementMap.size > 0) {
+      finalContent = this.restoreElements(finalContent, elementMap);
+      fs.writeFileSync(this.outputFile, finalContent.trim(), 'utf-8');
+    }
+    
+    return finalContent;
   }
 
   assembleAndWriteFinal(segments) {
@@ -154,6 +162,10 @@ export class Translator {
     }
 
     return finalContent;
+  }
+
+  restoreElements(content, elementMap) {
+    return restoreSpecialElements(content, elementMap);
   }
 
   appendReferences(referencesContent) {

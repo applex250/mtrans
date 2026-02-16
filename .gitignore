@@ -2,5 +2,6 @@ node_modules/
 .env
 settings.json
 cn/
+debug/
 *.log
 .DS_Store

@@ -1,9 +1,10 @@
 import fs from 'fs';
 import path from 'path';
 import dotenv from 'dotenv';
-import { parseMarkdown } from './parsers/markdownParser.js';
+import { parseMarkdown, parseFilteredMarkdown } from './parsers/markdownParser.js';
 import { extractDirection, designSegments } from './translator/segmentDesigner.js';
 import { Translator } from './translator/translator.js';
+import { filterSpecialElements, saveFilteredContent } from './filters/elementFilter.js';
 
 dotenv.config();
 
@@ -21,48 +22,90 @@ async function translatePaper(inputFile, outputFile) {
   console.log();
 
   try {
-    console.log('步骤 1/5: 解析 Markdown...');
-    const structure = parseMarkdown(inputFile);
-    console.log(`  - 总行数: ${structure.totalLines}`);
-    console.log(`  - 标题数: ${structure.headings.length}`);
-    console.log(`  - 段落数: ${structure.paragraphs.length}`);
-    console.log(`  - Abstract长度: ${structure.abstract.length} 字符`);
+    console.log('步骤 1/6: 解析原始 Markdown...');
+    const originalStructure = parseMarkdown(inputFile);
+    console.log(`  - 原始总行数: ${originalStructure.totalLines}`);
+    console.log(`  - 标题数: ${originalStructure.headings.length}`);
     console.log();
 
-    console.log('步骤 2/5: 提取专业方向...');
-    const direction = await extractDirection(structure);
+    console.log('步骤 2/6: 过滤特殊元素并保存中间文件...');
+    const content = fs.readFileSync(inputFile, 'utf-8');
+    const lines = content.split('\n');
+    const { filteredLines, elementMap, lineMapping, stats } = filterSpecialElements(lines, originalStructure);
+    console.log(`  - 过滤前: ${lines.length} 行`);
+    console.log(`  - 过滤后: ${filteredLines.length} 行`);
+    console.log(`  - 表格: ${stats.tablesFiltered} 个`);
+    console.log(`  - 图片: ${stats.imagesFiltered} 个`);
+    console.log(`  - 代码块: ${stats.codeBlocksFiltered} 个`);
+    
+    const { filteredFile, elementMapFile, lineMappingFile, statsFile } = saveFilteredContent(
+      filteredLines, 
+      elementMap, 
+      lineMapping, 
+      stats, 
+      inputFile
+    );
+    console.log(`  - 过滤文件: ${filteredFile}`);
+    console.log(`  - 元素映射: ${elementMapFile}`);
+    console.log();
+
+    console.log('步骤 3/6: 解析过滤后的 Markdown...');
+    const filteredStructure = parseFilteredMarkdown(filteredLines);
+    console.log(`  - 过滤后总行数: ${filteredStructure.totalLines}`);
+    console.log(`  - 标题数: ${filteredStructure.headings.length}`);
+    console.log(`  - 段落数: ${filteredStructure.paragraphs.length}`);
+    console.log(`  - Abstract长度: ${filteredStructure.abstract.length} 字符`);
+    console.log();
+
+    console.log('步骤 4/6: 提取专业方向...');
+    const direction = await extractDirection(filteredStructure);
     console.log(`  专业方向: ${direction}`);
     console.log();
 
-    console.log('步骤 3/5: 设计分段方案...');
-    const { segments, reason } = await designSegments(structure, direction);
+    console.log('步骤 5/6: 设计分段方案...');
+    const { segments, reason } = await designSegments(filteredStructure, direction);
     console.log(`  分段数: ${segments.length}`);
     console.log(`  分段理由: ${reason}`);
     console.log('  分段详情:');
     segments.forEach((seg, index) => {
       const [start, end] = seg;
-      const lines = end - start + 1;
-      console.log(`    分段 ${index + 1}: 行 ${start} - ${end} (共 ${lines} 行)`);
+      const segmentLines = end - start + 1;
+      console.log(`    分段 ${index + 1}: 行 ${start} - ${end} (共 ${segmentLines} 行)`);
     });
     console.log();
 
-    console.log('步骤 4/5: 开始翻译...');
-    const content = fs.readFileSync(inputFile, 'utf-8');
-    const lines = content.split('\n');
-
+    console.log('步骤 6/6: 翻译并还原...');
     const translator = new Translator(MAX_CONCURRENCY, outputFile);
-    await translator.translateAll(segments, lines, direction);
-    console.log();
-
-    console.log('步骤 5/5: 处理参考文献...');
-    if (structure.referencesSection.excluded && structure.referencesSection.content) {
-      console.log(`  参考文献位置: 行${structure.referencesSection.startLine}-${structure.referencesSection.endLine}`);
-      translator.appendReferences(structure.referencesSection.content);
-      console.log('  参考文献已追加到文件末尾');
-    } else {
-      console.log('  未检测到参考文献章节');
+    await translator.translateAll(segments, filteredLines, direction, elementMap);
+    
+    if (originalStructure.referencesSection.excluded && originalStructure.referencesSection.content) {
+      console.log(`  - 追加参考文献...`);
+      translator.appendReferences(originalStructure.referencesSection.content);
     }
     console.log(`  翻译完成，已保存到: ${outputFile}`);
+    console.log();
+
+    console.log('清理中间文件...');
+    const tempDir = path.join(process.cwd(), 'temp');
+    const tempFiles = [
+      filteredFile,
+      elementMapFile,
+      lineMappingFile,
+      statsFile
+    ];
+    
+    let deletedCount = 0;
+    for (const tempFile of tempFiles) {
+      try {
+        if (fs.existsSync(tempFile)) {
+          fs.unlinkSync(tempFile);
+          deletedCount++;
+        }
+      } catch (err) {
+        console.warn(`  警告: 无法删除文件 ${tempFile}`);
+      }
+    }
+    console.log(`  已删除 ${deletedCount} 个中间文件`);
     console.log();
 
     console.log('='.repeat(60));
