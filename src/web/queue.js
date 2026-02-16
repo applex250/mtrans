@@ -17,6 +17,8 @@ export class TaskQueue extends EventEmitter {
       progress: 0,
       speed: 0,
       createdAt: new Date(),
+      shouldStop: false,
+      abortController: new AbortController(),
       ...task
     };
     
@@ -111,38 +113,14 @@ export class TaskQueue extends EventEmitter {
     return this.queue.find(t => t.id === taskId);
   }
 
-  pauseTask(taskId) {
-    const task = this.queue.find(t => t.id === taskId);
-    if (task && task.status === 'processing') {
-      task.paused = true;
-      this.updateTaskStatus(taskId, 'paused');
-      this.isProcessing = false;
-      this.currentTask = null;
-      return true;
-    }
-    return false;
-  }
-
-  resumeTask(taskId) {
-    const task = this.queue.find(t => t.id === taskId);
-    if (task && task.status === 'paused') {
-      task.paused = false;
-      this.updateTaskStatus(taskId, 'pending');
-      if (!this.isProcessing) {
-        this.processNext();
-      }
-      return true;
-    }
-    return false;
-  }
-
   removeTask(taskId) {
     const index = this.queue.findIndex(t => t.id === taskId);
     if (index !== -1) {
       const task = this.queue[index];
       
       if (task.status === 'processing') {
-        return false;
+        task.shouldStop = true;
+        task.abortController.abort();
       }
       
       this.deleteInputFile(task);
@@ -164,6 +142,18 @@ export class TaskQueue extends EventEmitter {
       this.removeTask(task.id);
     });
     this.emit('queue-cleared');
+  }
+
+  clearPaused() {
+    const pausedTasks = this.queue.filter(t => t.status === 'paused');
+    if (pausedTasks.length > 0) {
+      console.log(`清理 ${pausedTasks.length} 个暂停的任务...`);
+      pausedTasks.forEach(task => {
+        console.log(`  - ${task.originalName}`);
+        this.removeTask(task.id);
+      });
+      this.emit('queue-cleared');
+    }
   }
 }
 

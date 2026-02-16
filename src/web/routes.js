@@ -80,6 +80,14 @@ router.post('/task', async (req, res) => {
     inputPath,
     outputPath,
     execute: async (task) => {
+      const checkTaskStatus = () => {
+        if (task.shouldStop || task.abortController.signal.aborted) {
+          const error = new Error('Task stopped');
+          error.isTaskStopped = true;
+          throw error;
+        }
+      };
+
       const logger = (message, type = 'info') => {
         const timestamp = new Date().toLocaleTimeString('en-US', { hour12: false });
         io.emit('log', { taskId: task.id, message, type, timestamp });
@@ -94,6 +102,7 @@ router.post('/task', async (req, res) => {
         const originalStructure = parseMarkdown(task.inputPath);
         logger(`  - 原始总行数: ${originalStructure.totalLines}`);
         logger(`  - 标题数: ${originalStructure.headings.length}`);
+        checkTaskStatus();
 
         logger('步骤 2/6: 过滤特殊元素并保存中间文件...');
         const content = fs.readFileSync(task.inputPath, 'utf-8');
@@ -114,6 +123,7 @@ router.post('/task', async (req, res) => {
         );
         logger(`  - 过滤文件: ${filteredFile}`);
         logger(`  - 元素映射: ${elementMapFile}`);
+        checkTaskStatus();
 
         logger('步骤 3/6: 解析过滤后的 Markdown...');
         const filteredStructure = parseFilteredMarkdown(filteredLines);
@@ -121,10 +131,12 @@ router.post('/task', async (req, res) => {
         logger(`  - 标题数: ${filteredStructure.headings.length}`);
         logger(`  - 段落数: ${filteredStructure.paragraphs.length}`);
         logger(`  - Abstract长度: ${filteredStructure.abstract.length} 字符`);
+        checkTaskStatus();
 
         logger('步骤 4/6: 提取专业方向...');
         const direction = await extractDirection(filteredStructure);
         logger(`  专业方向: ${direction}`);
+        checkTaskStatus();
 
         logger('步骤 5/6: 设计分段方案...');
         const { segments, reason } = await designSegments(filteredStructure, direction);
@@ -136,6 +148,7 @@ router.post('/task', async (req, res) => {
           const segmentLines = end - start + 1;
           logger(`    分段 ${index + 1}: 行 ${start} - ${end} (共 ${segmentLines} 行)`);
         });
+        checkTaskStatus();
 
         logger('步骤 6/6: 翻译并还原...');
         const MAX_CONCURRENCY = parseInt(process.env.MAX_CONCURRENCY || '2', 10);
@@ -151,7 +164,7 @@ router.post('/task', async (req, res) => {
           logger(message);
         };
 
-        await translator.translateAll(segments, filteredLines, direction, elementMap);
+        await translator.translateAll(segments, filteredLines, direction, elementMap, task.abortController.signal);
 
         if (originalStructure.referencesSection.excluded && originalStructure.referencesSection.content) {
           logger(`  - 追加参考文献...`);
@@ -176,6 +189,10 @@ router.post('/task', async (req, res) => {
         logger(`  已删除 ${deletedCount} 个中间文件`);
         
       } catch (error) {
+        if (error.isTaskStopped) {
+          logger('任务已停止', 'warning');
+          throw error;
+        }
         logger(`错误: ${error.message}`, 'error');
         throw error;
       }
@@ -185,22 +202,12 @@ router.post('/task', async (req, res) => {
   res.json(task);
 });
 
-router.post('/queue/pause/:id', (req, res) => {
-  const { id } = req.params;
-  const success = taskQueue.pauseTask(id);
-  res.json({ success });
-});
-
-router.post('/queue/resume/:id', (req, res) => {
-  const { id } = req.params;
-  const success = taskQueue.resumeTask(id);
-  res.json({ success });
-});
-
 router.delete('/queue/:id', (req, res) => {
   const { id } = req.params;
+  const task = taskQueue.getTask(id);
+  const status = task ? task.status : null;
   const success = taskQueue.removeTask(id);
-  res.json({ success });
+  res.json({ success, status });
 });
 
 router.delete('/queue', (req, res) => {

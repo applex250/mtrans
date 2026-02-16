@@ -77,6 +77,8 @@ taskQueue.on('queue-cleared', () => {
   io.emit('queue-update', taskQueue.getQueue());
 });
 
+taskQueue.clearPaused();
+
 server.listen(PORT, () => {
   const MAX_CONCURRENCY = parseInt(process.env.MAX_CONCURRENCY || '5', 10);
   console.log('='.repeat(60));

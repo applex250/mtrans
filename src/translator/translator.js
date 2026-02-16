@@ -68,13 +68,21 @@ export class Translator {
     }
   }
 
-  async translateSegment(segmentIndex, segmentLines, direction) {
+  async translateSegment(segmentIndex, segmentLines, direction, abortSignal = null) {
     const [startLine, endLine] = segmentLines;
     const content = segmentLines.join('\n');
     
     try {
+      if (abortSignal && abortSignal.aborted) {
+        throw new Error('Translation aborted');
+      }
+      
       const prompt = TRANSLATE_PROMPT(direction, content, startLine, endLine);
       const translated = await chatWithRetry(prompt, 3, `translate_${segmentIndex}`);
+      
+      if (abortSignal && abortSignal.aborted) {
+        throw new Error('Translation aborted');
+      }
       
       this.translations.set(segmentIndex, {
         startLine,
@@ -88,6 +96,11 @@ export class Translator {
       this.updateProgressBar();
       return translated;
     } catch (error) {
+      if (abortSignal && abortSignal.aborted) {
+        console.log(`\n分段翻译已取消 (行${startLine}-${endLine})`);
+        return null;
+      }
+      
       console.error(`\n分段翻译失败 (行${startLine}-${endLine}): ${error.message}`);
       this.translations.set(segmentIndex, {
         startLine,
@@ -104,7 +117,7 @@ export class Translator {
     }
   }
 
-  async translateAll(segments, lines, direction, elementMap = null) {
+  async translateAll(segments, lines, direction, elementMap = null, abortSignal = null) {
     if (segments.length === 0) {
       console.log('  无需要翻译的内容');
       return '';
@@ -117,11 +130,25 @@ export class Translator {
         const startIdx = segment[0] - 1;
         const endIdx = segment[1] - 1;
         const segmentLines = lines.slice(startIdx, endIdx + 1);
-        return this.translateSegment(index, segmentLines, direction);
+        return this.translateSegment(index, segmentLines, direction, abortSignal);
       });
     });
 
     await Promise.all(tasks);
+    
+    if (abortSignal && abortSignal.aborted) {
+      console.log('\n翻译已取消，停止组装最终文件');
+      this.stopProgressBar();
+      try {
+        if (fs.existsSync(this.tempFile)) {
+          fs.unlinkSync(this.tempFile);
+        }
+      } catch (err) {
+        console.warn('警告: 无法删除临时文件', this.tempFile);
+      }
+      throw new Error('Translation aborted');
+    }
+    
     this.stopProgressBar();
     
     let finalContent = this.assembleAndWriteFinal(segments);

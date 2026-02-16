@@ -83,17 +83,8 @@ function renderTasks(queue) {
       </div>
     ` : '';
 
-    const canDelete = task.status !== 'processing';
     const controlButtons = `
-      ${task.status === 'processing' ? `
-        <button onclick="pauseTask('${task.id}')" style="padding: 2px 8px; font-size: 10px;">暂停</button>
-      ` : ''}
-      ${task.status === 'paused' ? `
-        <button onclick="resumeTask('${task.id}')" style="padding: 2px 8px; font-size: 10px;">继续</button>
-      ` : ''}
-      ${canDelete ? `
-        <button onclick="removeTask('${task.id}')" style="padding: 2px 8px; font-size: 10px; border-color: #f00; color: #f00;">删除</button>
-      ` : ''}
+      <button onclick="removeTask('${task.id}')" style="padding: 2px 8px; font-size: 10px; border-color: #f00; color: #f00;">删除</button>
     `;
 
     return `
@@ -134,8 +125,7 @@ function getStatusIcon(status) {
     pending: '⏳',
     processing: '🔄',
     completed: '✅',
-    error: '❌',
-    paused: '⏸️'
+    error: '❌'
   };
   return icons[status] || '📄';
 }
@@ -145,8 +135,7 @@ function getStatusText(status) {
     pending: '等待中',
     processing: '翻译中',
     completed: '已完成',
-    error: '失败',
-    paused: '已暂停'
+    error: '失败'
   };
   return texts[status] || status;
 }
@@ -272,44 +261,6 @@ async function createTask(fileData) {
   }
 }
 
-async function pauseTask(taskId) {
-  try {
-    const response = await fetch(`/api/queue/pause/${taskId}`, {
-      method: 'POST'
-    });
-    const data = await response.json();
-    
-    if (data.success) {
-      addLog({
-        message: `[暂停] 任务已暂停`,
-        type: 'warning',
-        timestamp: new Date().toLocaleTimeString('en-US', { hour12: false })
-      });
-    }
-  } catch (error) {
-    console.error('暂停任务失败:', error);
-  }
-}
-
-async function resumeTask(taskId) {
-  try {
-    const response = await fetch(`/api/queue/resume/${taskId}`, {
-      method: 'POST'
-    });
-    const data = await response.json();
-    
-    if (data.success) {
-      addLog({
-        message: `[继续] 任务已继续`,
-        type: 'info',
-        timestamp: new Date().toLocaleTimeString('en-US', { hour12: false })
-      });
-    }
-  } catch (error) {
-    console.error('继续任务失败:', error);
-  }
-}
-
 async function removeTask(taskId) {
   if (!confirm('确定要删除这个任务吗？')) return;
   
@@ -320,8 +271,9 @@ async function removeTask(taskId) {
     const data = await response.json();
     
     if (data.success) {
+      const statusText = data.status ? `(${getStatusText(data.status)})` : '';
       addLog({
-        message: `[删除] 任务已删除`,
+        message: `[删除] 任务已删除 ${statusText}`,
         type: 'warning',
         timestamp: new Date().toLocaleTimeString('en-US', { hour12: false })
       });
