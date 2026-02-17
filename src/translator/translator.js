@@ -71,17 +71,31 @@ export class Translator {
   async translateSegment(segmentIndex, segmentLines, direction, abortSignal = null) {
     const [startLine, endLine] = segmentLines;
     const content = segmentLines.join('\n');
+    const label = `translate_${segmentIndex}`;
+    
+    const isAbortError = (error) => {
+      return error.name === 'AbortError' || 
+             (error.name === 'DOMException' && error.message.includes('Aborted')) ||
+             error.message.includes('Aborted') ||
+             error.message.includes('The user aborted a request') ||
+             error.message.includes('Task was cancelled') ||
+             error.message.includes('user aborted a request');
+    };
     
     try {
       if (abortSignal && abortSignal.aborted) {
-        throw new Error('Translation aborted');
+        console.log(`[中断] ${label} (行${startLine}-${endLine}) - 翻译开始前已取消`);
+        throw new Error('Aborted');
       }
       
+      console.log(`[开始] ${label} (行${startLine}-${endLine}) - 开始翻译`);
+      
       const prompt = TRANSLATE_PROMPT(direction, content, startLine, endLine);
-      const translated = await chatWithRetry(prompt, 3, `translate_${segmentIndex}`);
+      const translated = await chatWithRetry(prompt, 3, label, abortSignal);
       
       if (abortSignal && abortSignal.aborted) {
-        throw new Error('Translation aborted');
+        console.log(`[中断] ${label} (行${startLine}-${endLine}) - 翻译完成后已取消，丢弃结果`);
+        throw new Error('Aborted');
       }
       
       this.translations.set(segmentIndex, {
@@ -93,15 +107,16 @@ export class Translator {
       const segmentData = `<!-- SEGMENT:${segmentIndex} -->\n${translated}\n\n`;
       fs.appendFileSync(this.tempFile, segmentData, 'utf-8');
       
+      console.log(`[完成] ${label} (行${startLine}-${endLine}) - 已保存`);
       this.updateProgressBar();
       return translated;
     } catch (error) {
-      if (abortSignal && abortSignal.aborted) {
-        console.log(`\n分段翻译已取消 (行${startLine}-${endLine})`);
+      if (isAbortError(error) || (abortSignal && abortSignal.aborted)) {
+        console.log(`[中断] ${label} (行${startLine}-${endLine}) - 已取消`);
         return null;
       }
       
-      console.error(`\n分段翻译失败 (行${startLine}-${endLine}): ${error.message}`);
+      console.error(`[失败] ${label} (行${startLine}-${endLine}) - ${error.message}`);
       this.translations.set(segmentIndex, {
         startLine,
         endLine,
@@ -123,30 +138,86 @@ export class Translator {
       return '';
     }
     
+    console.log(`[开始翻译] 共 ${segments.length} 个分段`);
     this.createProgressBar(segments.length);
     
+    const isAbortError = (error) => {
+      return error.name === 'AbortError' || 
+             (error.name === 'DOMException' && error.message.includes('Aborted')) ||
+             error.message.includes('Aborted') ||
+             error.message.includes('The user aborted a request') ||
+             error.message.includes('Task was cancelled') ||
+             error.message.includes('user aborted a request');
+    };
+    
+    const createCancellableTask = (taskFn, index) => {
+      return Promise.race([
+        taskFn,
+        new Promise((_, reject) => {
+          if (abortSignal && abortSignal.aborted) {
+            reject(new Error('Translation aborted'));
+            return;
+          }
+          
+          const abortHandler = () => {
+            console.log(`[立即中断] 分段 ${index + 1} - 收到 abort 事件`);
+            reject(new Error('Translation aborted'));
+          };
+          
+          abortSignal.addEventListener('abort', abortHandler);
+          
+          taskFn.finally(() => {
+            abortSignal.removeEventListener('abort', abortHandler);
+          });
+        })
+      ]);
+    };
+    
     const tasks = segments.map((segment, index) => {
-      return this.limit(() => {
-        const startIdx = segment[0] - 1;
-        const endIdx = segment[1] - 1;
-        const segmentLines = lines.slice(startIdx, endIdx + 1);
-        return this.translateSegment(index, segmentLines, direction, abortSignal);
-      });
+      return createCancellableTask(
+        this.limit(() => {
+          const startIdx = segment[0] - 1;
+          const endIdx = segment[1] - 1;
+          const segmentLines = lines.slice(startIdx, endIdx + 1);
+          return this.translateSegment(index, segmentLines, direction, abortSignal);
+        }),
+        index
+      );
     });
 
-    await Promise.all(tasks);
+    const results = await Promise.allSettled(tasks);
     
     if (abortSignal && abortSignal.aborted) {
-      console.log('\n翻译已取消，停止组装最终文件');
+      console.log('\n[中断] 翻译已取消，停止组装最终文件');
+      console.log(`[中断] 已清理临时文件: ${this.tempFile}`);
       this.stopProgressBar();
+      
       try {
         if (fs.existsSync(this.tempFile)) {
           fs.unlinkSync(this.tempFile);
+          console.log(`[清理] 已删除临时文件: ${this.tempFile}`);
         }
       } catch (err) {
-        console.warn('警告: 无法删除临时文件', this.tempFile);
+        console.warn(`[警告] 无法删除临时文件 ${this.tempFile}:`, err.message);
       }
-      throw new Error('Translation aborted');
+      
+      const abortError = new Error('Translation aborted');
+      abortError.name = 'AbortError';
+      throw abortError;
+    }
+    
+    const completed = results.filter(r => r.status === 'fulfilled').length;
+    const cancelled = results.filter(r => r.status === 'rejected' && isAbortError(r.reason)).length;
+    const failed = results.filter(r => r.status === 'rejected' && !isAbortError(r.reason)).length;
+    
+    if (completed > 0) {
+      console.log(`[完成] ${completed} 个分段翻译成功`);
+    }
+    if (cancelled > 0) {
+      console.log(`[取消] ${cancelled} 个分段被取消`);
+    }
+    if (failed > 0) {
+      console.log(`[失败] ${failed} 个分段翻译失败`);
     }
     
     this.stopProgressBar();

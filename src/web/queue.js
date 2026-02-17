@@ -119,20 +119,33 @@ export class TaskQueue extends EventEmitter {
       const task = this.queue[index];
       
       if (task.status === 'processing') {
+        console.log(`[停止任务] ${task.originalName} (${task.id}) - 任务状态: ${task.status}`);
+        console.log(`[停止任务] ${task.originalName} - 设置 shouldStop = true`);
+        console.log(`[停止任务] ${task.originalName} - 调用 abortController.abort()`);
+        
         task.shouldStop = true;
         task.abortController.abort();
+        
+        console.log(`[停止任务] ${task.originalName} - 中断信号已发送`);
+        console.log(`[停止任务] ${task.originalName} - abortSignal.aborted: ${task.abortController.signal.aborted}`);
       }
       
+      console.log(`[删除任务] ${task.originalName} (${task.id}) - 删除输入文件: ${task.inputPath}`);
       this.deleteInputFile(task);
+      
+      console.log(`[删除任务] ${task.originalName} (${task.id}) - 从队列中移除`);
       this.queue.splice(index, 1);
       this.emit('task-removed', task);
       
       if (!this.isProcessing) {
+        console.log(`[队列] 开始处理下一个任务`);
         this.processNext();
       }
       
       return true;
     }
+    
+    console.log(`[删除任务] 任务 ID ${taskId} 不存在于队列中`);
     return false;
   }
 

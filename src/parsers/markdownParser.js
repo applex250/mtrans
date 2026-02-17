@@ -27,10 +27,16 @@ export function parseMarkdown(filePath) {
   let inReferences = false;
   let currentParagraph = [];
   let paraStartLine = 0;
+  let foundAbstractByHeading = false;
+  let first10000Chars = '';
 
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
     const lineNum = i + 1;
+
+    if (first10000Chars.length < 10000) {
+      first10000Chars += line + '\n';
+    }
 
     const headingMatch = line.match(/^(#{1,6})\s+(.+)$/);
     if (headingMatch) {
@@ -41,7 +47,8 @@ export function parseMarkdown(filePath) {
       const lowerText = text.toLowerCase();
       if (lowerText === 'abstract' || lowerText === '摘要') {
         inAbstract = true;
-      } else if (inAbstract && level <= 2) {
+        foundAbstractByHeading = true;
+      } else if (inAbstract) {
         inAbstract = false;
       }
 
@@ -129,6 +136,22 @@ export function parseMarkdown(filePath) {
     }
   }
 
+  if (!foundAbstractByHeading && first10000Chars.length > 0) {
+    const abstractMatch = first10000Chars.match(/\babstract\b/i);
+
+    if (abstractMatch) {
+      const abstractStartIndex = abstractMatch.index;
+      const abstractContent = first10000Chars.substring(abstractStartIndex);
+
+      const nextHeadingMatch = abstractContent.match(/^#{1,6}\s+/m);
+      if (nextHeadingMatch) {
+        structure.abstract = abstractContent.substring(0, nextHeadingMatch.index).trim();
+      } else {
+        structure.abstract = abstractContent.trim();
+      }
+    }
+  }
+
   if (currentParagraph.length > 0 && !inReferences) {
     const paraText = currentParagraph.join('\n');
     structure.paragraphs.push({
@@ -204,10 +227,16 @@ export function parseFilteredMarkdown(filteredLines) {
   let inReferences = false;
   let currentParagraph = [];
   let paraStartLine = 0;
+  let foundAbstractByHeading = false;
+  let first10000Chars = '';
 
   for (let i = 0; i < filteredLines.length; i++) {
     const line = filteredLines[i];
     const lineNum = i + 1;
+
+    if (first10000Chars.length < 10000) {
+      first10000Chars += line + '\n';
+    }
 
     const headingMatch = line.match(/^(#{1,6})\s+(.+)$/);
     if (headingMatch) {
@@ -218,7 +247,8 @@ export function parseFilteredMarkdown(filteredLines) {
       const lowerText = text.toLowerCase();
       if (lowerText === 'abstract' || lowerText === '摘要') {
         inAbstract = true;
-      } else if (inAbstract && level <= 2) {
+        foundAbstractByHeading = true;
+      } else if (inAbstract) {
         inAbstract = false;
       }
 
@@ -249,6 +279,22 @@ export function parseFilteredMarkdown(filteredLines) {
           wordCount: paraText.replace(/\s/g, '').length
         });
         currentParagraph = [];
+      }
+    }
+  }
+
+  if (!foundAbstractByHeading && first10000Chars.length > 0) {
+    const abstractMatch = first10000Chars.match(/\babstract\b/i);
+
+    if (abstractMatch) {
+      const abstractStartIndex = abstractMatch.index;
+      const abstractContent = first10000Chars.substring(abstractStartIndex);
+
+      const nextHeadingMatch = abstractContent.match(/^#{1,6}\s+/m);
+      if (nextHeadingMatch) {
+        structure.abstract = abstractContent.substring(0, nextHeadingMatch.index).trim();
+      } else {
+        structure.abstract = abstractContent.trim();
       }
     }
   }

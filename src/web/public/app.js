@@ -72,7 +72,7 @@ function renderTasks(queue) {
   taskList.innerHTML = queue.map(task => {
     const statusIcon = getStatusIcon(task.status);
     const statusClass = task.status;
-    const progressBar = task.progress > 0 ? `
+    const progressBar = `
       <div class="task-progress">
         <div class="progress-bar">
           <div class="progress-fill" style="width: ${task.progress}%">
@@ -81,7 +81,7 @@ function renderTasks(queue) {
         </div>
         ${task.speed > 0 ? `<div class="task-speed"><span>速度: ${task.speed} 段/秒</span></div>` : ''}
       </div>
-    ` : '';
+    `;
 
     const controlButtons = `
       <button onclick="removeTask('${task.id}')" style="padding: 2px 8px; font-size: 10px; border-color: #f00; color: #f00;">删除</button>
