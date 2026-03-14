@@ -99,7 +99,19 @@ router.post('/task', async (req, res) => {
   }
 
   const inputPath = path.join('input', filename);
-  const outputPath = path.join(taskQueue.outputPath, `${path.parse(filename).name}_translated.md`);
+  // For files needing conversion, output will be inside converted folder
+  // For direct markdown files, use original behavior
+  let outputPath;
+  if (needsConversion) {
+    const convertedDir = path.join(taskQueue.outputPath, `${path.parse(filename).name}_converted`);
+    // Ensure the output converted directory exists before translation starts
+    if (!fs.existsSync(convertedDir)) {
+      fs.mkdirSync(convertedDir, { recursive: true });
+    }
+    outputPath = path.join(convertedDir, `${path.parse(filename).name}_translated.md`);
+  } else {
+    outputPath = path.join(taskQueue.outputPath, `${path.parse(filename).name}_translated.md`);
+  }
 
   const task = taskQueue.addTask({
     filename,
@@ -142,20 +154,28 @@ router.post('/task', async (req, res) => {
           for (const tempFile of tempFiles) {
             try {
               if (fs.existsSync(tempFile)) {
-                fs.unlinkSync(tempFile);
+                const stats = fs.statSync(tempFile);
+                if (stats.isDirectory()) {
+                  // Recursively delete directory
+                  fs.rmSync(tempFile, { recursive: true, force: true });
+                  console.log(`[清理] 已删除目录: ${tempFile}`);
+                  logger(`  - 已删除目录: ${tempFile}`, 'info');
+                } else {
+                  fs.unlinkSync(tempFile);
+                  console.log(`[清理] 已删除: ${tempFile}`);
+                  logger(`  - 已删除: ${tempFile}`, 'info');
+                }
                 deletedCount++;
-                console.log(`[清理] 已删除: ${tempFile}`);
-                logger(`  - 已删除: ${tempFile}`, 'info');
               }
             } catch (err) {
-              const errorMsg = `无法删除文件 ${tempFile}`;
+              const errorMsg = `无法删除 ${tempFile}`;
               console.warn(`[警告] ${errorMsg}:`, err.message);
               logger(`  - ${errorMsg}`, 'warn');
             }
           }
           if (deletedCount > 0) {
-            console.log(`[清理] 总计已删除 ${deletedCount} 个临时文件`);
-            logger(`  已删除 ${deletedCount} 个临时文件`, 'info');
+            console.log(`[清理] 总计已删除 ${deletedCount} 个临时项目`);
+            logger(`  已删除 ${deletedCount} 个临时项目`, 'info');
           }
           tempFiles = [];
         }
@@ -175,25 +195,27 @@ router.post('/task', async (req, res) => {
         checkTaskStatus();
 
         // Step 0: MinerU conversion if needed
+        // Track input converted dir for later cleanup (after copying to output)
+        let inputConvertedDir = null;
         if (task.needsConversion) {
           logger(`步骤 1/${totalSteps}: MinerU 文档转换...`);
           console.log(`[步骤 1] ${task.originalName} - MinerU 文档转换`);
 
-          const convertedDir = path.join('input', `${path.parse(task.filename).name}_converted`);
-          if (!fs.existsSync(convertedDir)) {
-            fs.mkdirSync(convertedDir, { recursive: true });
+          inputConvertedDir = path.join('input', `${path.parse(task.filename).name}_converted`);
+          if (!fs.existsSync(inputConvertedDir)) {
+            fs.mkdirSync(inputConvertedDir, { recursive: true });
           }
 
           try {
             const convertedMdPath = await convertDocument(
               task.inputPath,
-              convertedDir,
+              inputConvertedDir,
               logger,
               task.abortController.signal
             );
 
             currentInputPath = convertedMdPath;
-            tempFiles.push(convertedDir); // Mark for cleanup
+            // Don't add to tempFiles yet - we'll copy to output first, then cleanup
             logger(`  转换后的 Markdown: ${convertedMdPath}`);
           } catch (conversionError) {
             logger(`MinerU 转换失败: ${conversionError.message}`, 'error');
@@ -313,6 +335,37 @@ router.post('/task', async (req, res) => {
 
         logger(`翻译完成，已保存到: ${task.outputPath}`);
         console.log(`[完成] ${task.originalName} - 翻译完成，已保存到: ${task.outputPath}`);
+
+        // If MinerU was used, copy the converted folder to output
+        if (inputConvertedDir) {
+          const outputConvertedDir = path.dirname(task.outputPath);
+          logger(`复制 converted 文件夹到输出目录...`);
+
+          const copyDir = (src, dest, skipFile = null) => {
+            fs.mkdirSync(dest, { recursive: true });
+            const entries = fs.readdirSync(src, { withFileTypes: true });
+            for (const entry of entries) {
+              const srcPath = path.join(src, entry.name);
+              const destPath = path.join(dest, entry.name);
+              if (entry.isDirectory()) {
+                copyDir(srcPath, destPath);
+              } else {
+                // Skip the translated output file if it already exists
+                if (skipFile && destPath === skipFile) {
+                  continue;
+                }
+                fs.copyFileSync(srcPath, destPath);
+              }
+            }
+          };
+
+          copyDir(inputConvertedDir, outputConvertedDir, task.outputPath);
+          logger(`  已复制到: ${outputConvertedDir}`);
+          console.log(`[复制] ${task.originalName} - 已复制 converted 文件夹到输出目录`);
+
+          // Now mark input converted dir for cleanup
+          tempFiles.push(inputConvertedDir);
+        }
 
         logger('清理中间文件...');
         console.log(`[清理] ${task.originalName} - 清理中间文件`);
