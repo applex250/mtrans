@@ -187,15 +187,7 @@ fileInput.addEventListener('change', async (e) => {
 
 async function uploadFiles(files) {
   for (const file of files) {
-    if (!file.name.match(/\.(md|markdown)$/i)) {
-      addLog({
-        message: `[错误] 不支持的文件类型: ${file.name}`,
-        type: 'error',
-        timestamp: new Date().toLocaleTimeString('en-US', { hour12: false })
-      });
-      continue;
-    }
-
+    // File type validation is done on the server side
     const formData = new FormData();
     formData.append('file', file);
 
@@ -212,8 +204,16 @@ async function uploadFiles(files) {
       });
 
       const data = await response.json();
-      
+
       if (response.ok) {
+        // Log file type information
+        if (data.fileType) {
+          addLog({
+            message: `[文件类型] ${data.fileType}${data.needsConversion ? ' (需要转换)' : ''}`,
+            type: 'info',
+            timestamp: new Date().toLocaleTimeString('en-US', { hour12: false })
+          });
+        }
         await createTask(data);
       } else {
         throw new Error(data.error || '上传失败');
@@ -237,16 +237,18 @@ async function createTask(fileData) {
       },
       body: JSON.stringify({
         filename: fileData.filename,
-        originalName: fileData.originalName
+        originalName: fileData.originalName,
+        needsConversion: fileData.needsConversion,
+        fileType: fileData.fileType
       })
     });
 
     const task = await response.json();
-    
+
     if (!response.ok) {
       throw new Error(task.error || '创建任务失败');
     }
-    
+
     addLog({
       message: `[任务已添加] ${task.originalName}`,
       type: 'success',

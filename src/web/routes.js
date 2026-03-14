@@ -8,6 +8,13 @@ import { parseMarkdown, parseFilteredMarkdown } from '../parsers/markdownParser.
 import { extractDirection, designSegments } from '../translator/segmentDesigner.js';
 import { Translator } from '../translator/translator.js';
 import { filterSpecialElements, saveFilteredContent } from '../filters/elementFilter.js';
+import {
+  isSupportedFileType,
+  isMarkdownFile,
+  needsMinerUConversion,
+  getFileType,
+  convertDocument
+} from '../services/minerUService.js';
 
 const router = express.Router();
 
@@ -31,10 +38,30 @@ router.post('/upload', upload.single('file'), (req, res) => {
   if (!req.file) {
     return res.status(400).json({ error: 'No file uploaded' });
   }
-  res.json({ 
+
+  const originalName = req.file.originalname;
+
+  // Check if file type is supported
+  if (!isSupportedFileType(originalName)) {
+    // Delete uploaded file if not supported
+    fs.unlinkSync(req.file.path);
+    return res.status(400).json({
+      error: 'Unsupported file type',
+      supportedTypes: '.md, .markdown, .pdf, .doc, .docx, .ppt, .pptx, .png, .jpg, .jpeg, .gif, .bmp'
+    });
+  }
+
+  const fileType = getFileType(originalName);
+  const needsConversion = needsMinerUConversion(originalName);
+  const isMarkdown = isMarkdownFile(originalName);
+
+  res.json({
     filename: req.file.filename,
     originalName: req.file.originalname,
-    path: req.file.path 
+    path: req.file.path,
+    fileType,
+    needsConversion,
+    isMarkdown
   });
 });
 
@@ -64,31 +91,33 @@ router.get('/queue', (req, res) => {
 });
 
 router.post('/task', async (req, res) => {
-  const { filename, originalName } = req.body;
+  const { filename, originalName, needsConversion, fileType } = req.body;
   const io = req.app.get('io');
-  
+
   if (!filename) {
     return res.status(400).json({ error: 'Filename is required' });
   }
-  
+
   const inputPath = path.join('input', filename);
   const outputPath = path.join(taskQueue.outputPath, `${path.parse(filename).name}_translated.md`);
-  
+
   const task = taskQueue.addTask({
     filename,
     originalName: originalName || filename,
     inputPath,
     outputPath,
+    fileType: fileType || 'markdown',
+    needsConversion: needsConversion || false,
     execute: async (task) => {
       const isAbortError = (error) => {
-        return error.name === 'AbortError' || 
+        return error.name === 'AbortError' ||
                (error.name === 'DOMException' && error.message.includes('Aborted')) ||
                error.message.includes('Aborted') ||
                error.message.includes('The user aborted a request') ||
                error.message.includes('Task was cancelled') ||
                error.message.includes('user aborted a request');
       };
-      
+
       const checkTaskStatus = () => {
         if (task.shouldStop || (task.abortController && task.abortController.signal.aborted)) {
           console.log(`[中断检查] ${task.originalName} - 检测到停止信号`);
@@ -102,9 +131,10 @@ router.post('/task', async (req, res) => {
         const timestamp = new Date().toLocaleTimeString('en-US', { hour12: false });
         io.emit('log', { taskId: task.id, message, type, timestamp });
       };
-      
+
       let tempFiles = [];
-      
+      let currentInputPath = task.inputPath;
+
       const cleanupTempFiles = (message = '') => {
         if (tempFiles.length > 0) {
           if (message) logger(message, 'warning');
@@ -130,28 +160,62 @@ router.post('/task', async (req, res) => {
           tempFiles = [];
         }
       };
-      
+
+      // Calculate total steps based on conversion needs
+      const totalSteps = task.needsConversion ? 7 : 6;
+      const stepOffset = task.needsConversion ? 1 : 0;
+
       logger(`开始翻译: ${task.originalName}`);
+      logger(`文件类型: ${task.fileType}`);
       logger(`输入文件: ${task.inputPath}`);
       logger(`输出文件: ${task.outputPath}`);
       console.log(`[开始] ${task.originalName} - 开始翻译任务`);
-      
+
       try {
         checkTaskStatus();
-        
-        logger('步骤 1/6: 解析原始 Markdown...');
-        console.log(`[步骤 1] ${task.originalName} - 解析原始 Markdown`);
-        const originalStructure = parseMarkdown(task.inputPath);
+
+        // Step 0: MinerU conversion if needed
+        if (task.needsConversion) {
+          logger(`步骤 1/${totalSteps}: MinerU 文档转换...`);
+          console.log(`[步骤 1] ${task.originalName} - MinerU 文档转换`);
+
+          const convertedDir = path.join('input', `${path.parse(task.filename).name}_converted`);
+          if (!fs.existsSync(convertedDir)) {
+            fs.mkdirSync(convertedDir, { recursive: true });
+          }
+
+          try {
+            const convertedMdPath = await convertDocument(
+              task.inputPath,
+              convertedDir,
+              logger,
+              task.abortController.signal
+            );
+
+            currentInputPath = convertedMdPath;
+            tempFiles.push(convertedDir); // Mark for cleanup
+            logger(`  转换后的 Markdown: ${convertedMdPath}`);
+          } catch (conversionError) {
+            logger(`MinerU 转换失败: ${conversionError.message}`, 'error');
+            throw new Error(`MinerU conversion failed: ${conversionError.message}`);
+          }
+
+          checkTaskStatus();
+        }
+
+        logger(`步骤 ${1 + stepOffset}/${totalSteps}: 解析原始 Markdown...`);
+        console.log(`[步骤 ${1 + stepOffset}] ${task.originalName} - 解析原始 Markdown`);
+        const originalStructure = parseMarkdown(currentInputPath);
         logger(`  - 原始总行数: ${originalStructure.totalLines}`);
         logger(`  - 标题数: ${originalStructure.headings.length}`);
-        
+
         checkTaskStatus();
 
         checkTaskStatus();
-        
-        logger('步骤 2/6: 过滤特殊元素并保存中间文件...');
-        console.log(`[步骤 2] ${task.originalName} - 过滤特殊元素并保存中间文件`);
-        const content = fs.readFileSync(task.inputPath, 'utf-8');
+
+        logger(`步骤 ${2 + stepOffset}/${totalSteps}: 过滤特殊元素并保存中间文件...`);
+        console.log(`[步骤 ${2 + stepOffset}] ${task.originalName} - 过滤特殊元素并保存中间文件`);
+        const content = fs.readFileSync(currentInputPath, 'utf-8');
         const lines = content.split('\n');
         const { filteredLines, elementMap, lineMapping, stats } = filterSpecialElements(lines, originalStructure);
         logger(`  - 过滤前: ${lines.length} 行`);
@@ -159,49 +223,49 @@ router.post('/task', async (req, res) => {
         logger(`  - 表格: ${stats.tablesFiltered} 个`);
         logger(`  - 图片: ${stats.imagesFiltered} 个`);
         logger(`  - 代码块: ${stats.codeBlocksFiltered} 个`);
-        
+
         const { filteredFile, elementMapFile, lineMappingFile, statsFile } = saveFilteredContent(
-          filteredLines, 
-          elementMap, 
-          lineMapping, 
-          stats, 
-          task.inputPath
+          filteredLines,
+          elementMap,
+          lineMapping,
+          stats,
+          currentInputPath
         );
-        
+
         tempFiles.push(filteredFile, elementMapFile, lineMappingFile, statsFile);
         console.log(`[临时文件] ${task.originalName} - 已创建临时文件:`);
         tempFiles.forEach(f => console.log(`  - ${f}`));
-        
+
         logger(`  - 过滤文件: ${filteredFile}`);
         logger(`  - 元素映射: ${elementMapFile}`);
-        
+
         checkTaskStatus();
 
         checkTaskStatus();
-        
-        logger('步骤 3/6: 解析过滤后的 Markdown...');
-        console.log(`[步骤 3] ${task.originalName} - 解析过滤后的 Markdown`);
+
+        logger(`步骤 ${3 + stepOffset}/${totalSteps}: 解析过滤后的 Markdown...`);
+        console.log(`[步骤 ${3 + stepOffset}] ${task.originalName} - 解析过滤后的 Markdown`);
         const filteredStructure = parseFilteredMarkdown(filteredLines);
         logger(`  - 过滤后总行数: ${filteredStructure.totalLines}`);
         logger(`  - 标题数: ${filteredStructure.headings.length}`);
         logger(`  - 段落数: ${filteredStructure.paragraphs.length}`);
         logger(`  - Abstract长度: ${filteredStructure.abstract.length} 字符`);
-        
+
         checkTaskStatus();
 
         checkTaskStatus();
-        
-        logger('步骤 4/6: 提取专业方向...');
-        console.log(`[步骤 4] ${task.originalName} - 提取专业方向`);
+
+        logger(`步骤 ${4 + stepOffset}/${totalSteps}: 提取专业方向...`);
+        console.log(`[步骤 ${4 + stepOffset}] ${task.originalName} - 提取专业方向`);
         const direction = await extractDirection(filteredStructure);
         logger(`  专业方向: ${direction}`);
-        
+
         checkTaskStatus();
 
         checkTaskStatus();
-        
-        logger('步骤 5/6: 设计分段方案...');
-        console.log(`[步骤 5] ${task.originalName} - 设计分段方案`);
+
+        logger(`步骤 ${5 + stepOffset}/${totalSteps}: 设计分段方案...`);
+        console.log(`[步骤 ${5 + stepOffset}] ${task.originalName} - 设计分段方案`);
         const { segments, reason } = await designSegments(filteredStructure, direction);
         logger(`  分段数: ${segments.length}`);
         logger(`  分段理由: ${reason}`);
@@ -211,13 +275,13 @@ router.post('/task', async (req, res) => {
           const segmentLines = end - start + 1;
           logger(`    分段 ${index + 1}: 行 ${start} - ${end} (共 ${segmentLines} 行)`);
         });
-        
+
         checkTaskStatus();
 
         checkTaskStatus();
-        
-        logger('步骤 6/6: 翻译并还原...');
-        console.log(`[步骤 6] ${task.originalName} - 翻译并还原`);
+
+        logger(`步骤 ${6 + stepOffset}/${totalSteps}: 翻译并还原...`);
+        console.log(`[步骤 ${6 + stepOffset}] ${task.originalName} - 翻译并还原`);
         const MAX_CONCURRENCY = parseInt(process.env.MAX_CONCURRENCY || '2', 10);
         const translator = new Translator(MAX_CONCURRENCY, task.outputPath);
 
@@ -228,7 +292,7 @@ router.post('/task', async (req, res) => {
           const progress = (current / total) * 100;
           taskQueue.updateTaskProgress(task.id, progress, speed);
           logger(`翻译进度 |${'█'.repeat(Math.floor(progress / 10))}${'░'.repeat(10 - Math.floor(progress / 10))}| ${Math.floor(progress)}% | ${current}/${total} 段 | 速度: ${speed} 段/秒`);
-          
+
           checkTaskStatus();
         };
 
@@ -253,31 +317,31 @@ router.post('/task', async (req, res) => {
         logger('清理中间文件...');
         console.log(`[清理] ${task.originalName} - 清理中间文件`);
         cleanupTempFiles('');
-        
+
       } catch (error) {
         if (error.isTaskStopped || isAbortError(error)) {
           console.log(`[中断] ${task.originalName} - 任务已停止`);
           logger('[中断] 任务已停止', 'warning');
-          
+
           console.log(`[清理] ${task.originalName} - 中断时清理临时文件`);
           logger('清理临时文件...', 'warning');
           cleanupTempFiles('');
-          
+
           throw error;
         }
-        
+
         console.error(`[错误] ${task.originalName} - ${error.message}`);
         logger(`错误: ${error.message}`, 'error');
-        
+
         console.log(`[清理] ${task.originalName} - 错误时清理临时文件`);
         logger('清理临时文件...', 'warning');
         cleanupTempFiles('');
-        
+
         throw error;
       }
     }
   });
-  
+
   res.json(task);
 });
 

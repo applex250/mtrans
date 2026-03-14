@@ -3,17 +3,24 @@
 基于智谱 GLM-4.7 的英文学术文献 Markdown 翻译工具，支持智能分段、并发翻译和实时进度显示。
 ![alt text](image.png)
 
-> **🚀 v2.0 重大更新** - 本次更新引入了全新的过滤机制，大幅提升翻译效率和准确性：
+> **🚀 v2.1 重大更新** - 集成 MinerU API，支持多种文档格式直接翻译：
+> - ✅ **多格式支持**：直接上传 PDF、Word、PPT、图片等格式，自动转换为 Markdown 后翻译
+> - ✅ **MinerU 集成**：集成 [MinerU](https://mineru.net/) API 进行高质量文档转换
+> - ✅ **图片提取**：自动提取并保留文档中的图片
 > - ✅ **HTML 表格支持**：新增识别和过滤 HTML 格式表格（`<table>...</table>`）
 > - ✅ **过滤优化**：翻译时过滤表格、代码块、图片等特殊元素，节省 50%+ Token 消耗
 > - ✅ **智能分段**：基于过滤后的内容进行分段，段落统计更准确
 > - ✅ **自动清理**：翻译完成后自动删除临时中间文件
-> - ✅ **工作流程重构**：从 5 步优化为 6 步，逻辑更清晰
 
-# 推荐使用方法
-https://mineru.net/client 进行pdf转markdown，
+## 支持的文件格式
 
-然后用该项目进行翻译。
+| 格式类型 | 扩展名 | 处理方式 |
+|---------|--------|---------|
+| Markdown | `.md`, `.markdown` | 直接翻译 |
+| PDF | `.pdf` | MinerU 转换 → 翻译 |
+| Word | `.doc`, `.docx` | MinerU 转换 → 翻译 |
+| PowerPoint | `.ppt`, `.pptx` | MinerU 转换 → 翻译 |
+| 图片 | `.png`, `.jpg`, `.jpeg`, `.gif`, `.bmp` | MinerU 转换 → 翻译 |
 
 ## 重构
 把原来使用llm进行分段的程序流改为使用计数程序（达到10000字符）进行分段。
@@ -54,13 +61,16 @@ npm install
 cp .env.example .env
 ```
 
-编辑 `.env` 文件，填写你的智谱 API Key：
+编辑 `.env` 文件，填写你的 API Key：
 
 ```env
 ZHIPU_API_KEY=your_api_key_here
 ZHIPU_MODEL=glm-4
 MAX_CONCURRENCY=5
+MINERU_API_TOKEN=your_mineru_api_token_here
 ```
+
+> **MinerU API Token**：用于 PDF、Word、PPT、图片等格式转换为 Markdown。如需使用多格式支持，请在 [MinerU 官网](https://mineru.net/) 注册并获取 API Token。
 
 ## 使用
 
@@ -135,9 +145,11 @@ mtrans/
 │   ├── translator/
 │   │   ├── segmentDesigner.js   # 分段设计器
 │   │   └── translator.js        # 翻译器（支持元素还原）
+│   ├── services/
+│   │   └── minerUService.js     # MinerU API 集成（文档转 Markdown）
 │   ├── web/
 │   │   ├── server.js            # Web 服务器
-│   │   ├── routes.js            # API 路由（6步工作流程）
+│   │   ├── routes.js            # API 路由（支持多格式转换）
 │   │   ├── queue.js             # 任务队列管理
 │   │   ├── settings.js          # 配置文件管理
 │   │   └── public/
@@ -164,6 +176,7 @@ mtrans/
 | `ZHIPU_MODEL` | 使用的模型 | glm-4 |
 | `MAX_CONCURRENCY` | 并发翻译段数 | 5 |
 | `WEB_PORT` | Web 服务器端口 | 3000 |
+| `MINERU_API_TOKEN` | MinerU API Token（用于多格式转换） | 可选 |
 
 ### 配置文件
 
@@ -256,6 +269,7 @@ npm test
 - `express`: Web 服务器框架
 - `socket.io`: WebSocket 实时通信
 - `multer`: 文件上传中间件
+- `adm-zip`: ZIP 文件解压（用于 MinerU 转换结果）
 
 ## 许可证
 

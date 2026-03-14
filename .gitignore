@@ -5,3 +5,7 @@ cn/
 debug/
 *.log
 .DS_Store
+# 保留 input/output/temp 空文件夹，只忽略里面的所有内容
+input/**/*
+output/**/*
+temp/**/*
